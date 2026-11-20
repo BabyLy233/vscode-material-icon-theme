@@ -90,7 +90,7 @@ jobs:
             name,
             displayName: "Material Icon Theme",
             version: p.version,
-            description: `${p.description} for Mayoi`,
+            description: "Material Design Icons for Mayoi",
             author: "Material Extensions",
             mayoi: ">=0.0.0",
             contributes: {
