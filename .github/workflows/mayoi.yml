@@ -2,8 +2,9 @@ name: Build Mayoi plugin
 
 on:
   schedule:
-    # Once a day, after upstream's usual release hours.
-    - cron: "17 3 * * *"
+    # Upstream releases every three or four weeks (median 25-28 days), so a
+    # weekly check finds a release within a week without building daily.
+    - cron: "17 3 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -32,13 +33,34 @@ jobs:
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      - name: Is this release already built?
+        id: check
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          set -eu
+          want="${TAG#v}"
+          current=$(curl -fsSL \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/mayoi/plugin.json" \
+            | jq -r '.version // empty' 2>/dev/null || true)
+          # A manual run builds even when the release is unchanged, for a
+          # workflow change or a forced rebuild.
+          if [ "${GITHUB_EVENT_NAME}" = "schedule" ] && [ "$current" = "$want" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "mayoi already has ${want}; nothing to do."
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.check.outputs.build == 'true'
         with:
           repository: material-extensions/vscode-material-icon-theme
           ref: ${{ steps.upstream.outputs.tag }}
           path: upstream
 
       - name: Build the icons
+        if: steps.check.outputs.build == 'true'
         working-directory: upstream
         env:
           PUPPETEER_SKIP_DOWNLOAD: "1"
@@ -53,6 +75,7 @@ jobs:
           jq -e '.iconDefinitions | length > 0' dist/material-icons.json > /dev/null
 
       - name: Assemble the Mayoi plugin
+        if: steps.check.outputs.build == 'true'
         env:
           TAG: ${{ steps.upstream.outputs.tag }}
         run: |
@@ -97,6 +120,7 @@ jobs:
           EOF
 
       - name: Push the mayoi branch
+        if: steps.check.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.upstream.outputs.tag }}

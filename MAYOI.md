@@ -5,6 +5,10 @@ This fork keeps a Mayoi plugin built from upstream's icons. `main` follows
 the **Build Mayoi plugin** workflow builds the latest upstream release and force-pushes the result to the `mayoi`
 branch.
 
+Upstream releases about every three or four weeks (median 25-28 days), so the workflow checks weekly, on Monday, and
+skips the build when `mayoi` already has that version. A manual **Run workflow** always rebuilds, which is useful after
+a change to the workflow itself.
+
 Install it with:
 
 ```sh
