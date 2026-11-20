@@ -1,0 +1,119 @@
+name: Build Mayoi plugin
+
+on:
+  schedule:
+    # Once a day, after upstream's usual release hours.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mayoi-plugin
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find the latest upstream release
+        id: upstream
+        run: |
+          set -eu
+          tag=$(git ls-remote --tags --refs \
+            https://github.com/material-extensions/vscode-material-icon-theme.git \
+            | sed 's#.*refs/tags/##' \
+            | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -1)
+          if [ -z "$tag" ]; then
+            echo "no upstream tag found" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: material-extensions/vscode-material-icon-theme
+          ref: ${{ steps.upstream.outputs.tag }}
+          path: upstream
+
+      - name: Build the icons
+        working-directory: upstream
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "1"
+        run: |
+          set -eu
+          npm ci --ignore-scripts --no-audit --no-fund
+          mkdir -p dist
+          npm run generateJson > dist/material-icons.json
+          npm run generateOpenFolders
+          npm run generateClones
+          test -s dist/material-icons.json
+          jq -e '.iconDefinitions | length > 0' dist/material-icons.json > /dev/null
+
+      - name: Assemble the Mayoi plugin
+        env:
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          set -eu
+          mkdir -p out
+          cp -r upstream/dist upstream/icons upstream/LICENSE out/
+          node - <<'JS'
+          const fs = require("fs");
+          const p = JSON.parse(fs.readFileSync("upstream/package.json", "utf8"));
+          const name = "material-icon-theme";
+          fs.writeFileSync("out/plugin.json", JSON.stringify({
+            name,
+            displayName: "Material Icon Theme",
+            version: p.version,
+            description: `${p.description} for Mayoi`,
+            author: "Material Extensions",
+            mayoi: ">=0.0.0",
+            contributes: {
+              fileIconThemes: [{
+                id: `${name}.icons`,
+                label: "Material Icon Theme",
+                path: "dist/material-icons.json"
+              }]
+            }
+          }, null, 2) + "\n");
+          JS
+          cat > out/README.md <<EOF
+          # Material Icon Theme for Mayoi
+
+          Built from [material-extensions/vscode-material-icon-theme](https://github.com/material-extensions/vscode-material-icon-theme)
+          at \`${TAG}\`. Do not edit this branch by hand: the **Build Mayoi plugin** workflow rewrites it.
+
+          ## Install
+
+          \`\`\`sh
+          mayoi plugin install BabyLy233/vscode-material-icon-theme@mayoi
+          \`\`\`
+
+          Then choose **View → Theme → File Icon Theme… → Material Icon Theme**.
+
+          The icons are MIT licensed; see \`LICENSE\`.
+          EOF
+
+      - name: Push the mayoi branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+        run: |
+          set -eu
+          url="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$url" mayoi > /dev/null 2>&1; then
+            git clone --depth=1 --branch mayoi "$url" old > /dev/null 2>&1
+            if diff -r -x .git old out > /dev/null; then
+              echo "The mayoi branch is already up to date."
+              exit 0
+            fi
+          fi
+          cd out
+          git init -b mayoi
+          git config user.name "mayoi-icons"
+          git config user.email "mayoi-icons@users.noreply.github.com"
+          git add -A
+          git commit -m "Build Material Icon Theme ${TAG} for Mayoi"
+          git push --force "$url" mayoi
