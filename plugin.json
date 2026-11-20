@@ -1,0 +1,17 @@
+{
+  "name": "material-icon-theme",
+  "displayName": "Material Icon Theme",
+  "version": "5.40.0",
+  "description": "Material Design Icons for Mayoi",
+  "author": "Material Extensions",
+  "mayoi": ">=0.0.0",
+  "contributes": {
+    "fileIconThemes": [
+      {
+        "id": "material-icon-theme.icons",
+        "label": "Material Icon Theme",
+        "path": "dist/material-icons.json"
+      }
+    ]
+  }
+}
