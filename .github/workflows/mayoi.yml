@@ -114,7 +114,7 @@ jobs:
           mayoi plugin install BabyLy233/vscode-material-icon-theme@mayoi
           \`\`\`
 
-          Then choose it on the Appearance page of Settings; **View → Theme → File Icon Theme…** opens it there.
+          Then choose **View → Theme → File Icon Theme… → Material Icon Theme**.
 
           The icons are MIT licensed; see \`LICENSE\`.
           EOF
